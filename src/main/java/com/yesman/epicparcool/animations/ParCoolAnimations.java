@@ -6,14 +6,12 @@ import net.minecraft.world.entity.EntityDimensions;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-import com.alrex.parcool.client.input.KeyBindings;
-import com.alrex.parcool.common.action.impl.ClingToCliff;
-import com.alrex.parcool.common.action.impl.HideInBlock;
-import com.alrex.parcool.common.action.impl.RideZipline;
-import com.alrex.parcool.common.attachment.common.Parkourability;
-import com.alrex.parcool.config.ParCoolConfig;
-import com.alrex.parcool.utilities.EntityUtil;
-import com.alrex.parcool.utilities.VectorUtil;
+import com.alrex.parcool.ParCool;
+import com.alrex.parcool.api.ParCoolSoundEvents;
+import com.alrex.parcool.client.input.ParCoolKeyBinds;
+import com.alrex.parcool.common.Parkourability;
+import com.alrex.parcool.common.action.ParCoolActions;
+import com.alrex.parcool.util.VectorUtil;
 import com.mojang.datafixers.util.Pair;
 import com.yesman.epicparcool.EpicParCool;
 import com.yesman.epicparcool.ParCoolUtils;
@@ -491,7 +489,7 @@ public class ParCoolAnimations {
                 .addProperty(StaticAnimationProperty.ON_ITEM_CHANGE_EVENT, SimpleEvent.create(Animations.ReusableSources.SET_TOOLS_BACK_WHEN_ITEM_CHANGED, Side.CLIENT))
                 .addEvents(StaticAnimationProperty.ON_END_EVENTS, SimpleEvent.create(Animations.ReusableSources.REVERT_TO_HANDS, Side.CLIENT))
                 .addEvents(SimpleEvent.create((entitypatch, animation, param) -> {
-                    KeyBindings.getKeyHangDown().setDown(false);
+                    ParCoolKeyBinds.HANG.key().setDown(false);
                 }, Side.LOCAL_CLIENT))
                 .newTimePair(0.0F, 10000.0F)
                     .addStateRemoveOld(EntityState.COMBO_ATTACKS_DOABLE, false)
@@ -531,7 +529,7 @@ public class ParCoolAnimations {
                     SimpleEvent.create((entitypatch, animation, params) -> {
                         if (entitypatch instanceof PlayerPatch<?> playerpatch) {
                             Parkourability parkourability = Parkourability.get(playerpatch.getOriginal());
-                            Vec3 lookVec = parkourability.get(HideInBlock.class).getLookDirection();
+                            Vec3 lookVec = parkourability.get(ParCoolActions.HIDE_IN_BLOCK).getFacingVec();
 
                             if (lookVec != null) {
                                 float yRot = (float) VectorUtil.toYawDegree(lookVec);
@@ -562,10 +560,10 @@ public class ParCoolAnimations {
 
                     if (entitypatch instanceof PlayerPatch<?> playerpatch) {
                         Parkourability parkourability = Parkourability.get(playerpatch.getOriginal());
-                        ParCoolMixinRideZiplineAccessor action = (ParCoolMixinRideZiplineAccessor)parkourability.get(RideZipline.class);
+                        ParCoolMixinRideZiplineAccessor action = (ParCoolMixinRideZiplineAccessor)parkourability.get(ParCoolActions.RIDE_ZIPLINE);
                         double d1 = Math.abs(action.getSpeed());
                         double d2 = -1.0D / (d1 + 1.0D) + 1.0D;
-                        Vec3 offset = action.getEndOffsetFromStart().normalize();
+                        Vec3 offset = parkourability.get(ParCoolActions.RIDE_ZIPLINE).getZiplineOffset().normalize();
                         Vec3 lookVec = VectorUtil.fromYawDegree(playerpatch.getYRot());
                         double dot = offset.dot(lookVec);
 
@@ -596,10 +594,10 @@ public class ParCoolAnimations {
 
                     if (entitypatch instanceof PlayerPatch<?> playerpatch) {
                         Parkourability parkourability = Parkourability.get(playerpatch.getOriginal());
-                        ParCoolMixinRideZiplineAccessor action = (ParCoolMixinRideZiplineAccessor)parkourability.get(RideZipline.class);
+                        ParCoolMixinRideZiplineAccessor action = (ParCoolMixinRideZiplineAccessor)parkourability.get(ParCoolActions.RIDE_ZIPLINE);
                         double d1 = Math.abs(action.getSpeed());
                         double d2 = -1.0D / (d1 + 1.0D) + 1.0D;
-                        double yawToEndPoint = VectorUtil.toYaw(action.getEndOffsetFromStart());
+                        double yawToEndPoint = VectorUtil.toYawDegree(parkourability.get(ParCoolActions.RIDE_ZIPLINE).getZiplineOffset());
                         double playerYaw = Mth.wrapDegrees(playerpatch.getYRot() - yawToEndPoint);
 
                         modular += ((playerYaw > 0.0D) ? -1.0D : 1.0D) * d2 * 0.5D;
@@ -1076,18 +1074,18 @@ public class ParCoolAnimations {
                 .addProperty(ActionAnimationProperty.REMOVE_DELTA_MOVEMENT, true)
                 .addProperty(ActionAnimationProperty.NO_GRAVITY_TIME, TimePairList.create(-1.0F, 10.0F))
                 .addEvents(SimpleEvent.create((entitypatch, animation, param) -> {
-                    KeyBindings.getKeyHangDown().setDown(false);
+                    ParCoolKeyBinds.HANG.key().setDown(false);
                 }, Side.LOCAL_CLIENT))
                 .addEvents(StaticAnimationProperty.ON_BEGIN_EVENTS, SimpleEvent.create(Animations.ReusableSources.SET_TOOLS_BACK, Side.CLIENT))
                 .addEvents(StaticAnimationProperty.ON_END_EVENTS,
                     SimpleEvent.create(Animations.ReusableSources.REVERT_TO_HANDS, Side.CLIENT),
                     SimpleEvent.create((entitypatch, animation, param) -> {
                         if (entitypatch instanceof AbstractClientPlayerPatch<?> playerpatch && playerpatch.getOriginal().isLocalPlayer()) {
-                            EntityUtil.addVelocity(entitypatch.getOriginal(), entitypatch.getOriginal().getLookAngle().multiply(1, 0, 1).normalize().scale(entitypatch.getOriginal().getBbWidth() * 0.75));
+                            entitypatch.getOriginal().setDeltaMovement(entitypatch.getOriginal().getDeltaMovement().add(entitypatch.getOriginal().getLookAngle().multiply(1, 0, 1).normalize().scale(entitypatch.getOriginal().getBbWidth() * 0.75)));
                         }
 
-                        if (ParCoolConfig.Client.Booleans.EnableActionSounds.get()) {
-                            entitypatch.getOriginal().playSound(com.alrex.parcool.api.SoundEvents.HANG_DOWN_JUMP.get(), 1f, 1f);
+                        if (ParCool.getConfig().client().enableActionSounds.get()) {
+                            entitypatch.getOriginal().playSound(ParCoolSoundEvents.LONG_JUMP.get(), 1f, 1f);
                         }
 
                         entitypatch.getAnimator().reserveAnimation(BIPED_JUMP_FROM_BAR);
@@ -1100,7 +1098,7 @@ public class ParCoolAnimations {
                 .addProperty(ActionAnimationProperty.REMOVE_DELTA_MOVEMENT, true)
                 .addProperty(ActionAnimationProperty.NO_GRAVITY_TIME, TimePairList.create(-1.0F, 10.0F))
                 .addEvents(SimpleEvent.create((entitypatch, animation, param) -> {
-                    KeyBindings.getKeyHangDown().setDown(false);
+                    ParCoolKeyBinds.HANG.key().setDown(false);
                 }, Side.LOCAL_CLIENT))
                 .addEvents(StaticAnimationProperty.ON_BEGIN_EVENTS, SimpleEvent.create(Animations.ReusableSources.SET_TOOLS_BACK, Side.CLIENT))
                 .addEvents(StaticAnimationProperty.ON_END_EVENTS,
@@ -1108,11 +1106,11 @@ public class ParCoolAnimations {
                     SimpleEvent.create((entitypatch, animation, param) -> {
                         if (entitypatch.isLogicalClient()) {
                             if (entitypatch instanceof AbstractClientPlayerPatch<?> playerpatch && playerpatch.getOriginal().isLocalPlayer()) {
-                                EntityUtil.addVelocity(entitypatch.getOriginal(), entitypatch.getOriginal().getLookAngle().multiply(1, 0, 1).normalize().scale(entitypatch.getOriginal().getBbWidth() * 0.75));
+                                entitypatch.getOriginal().setDeltaMovement(entitypatch.getOriginal().getDeltaMovement().add(entitypatch.getOriginal().getLookAngle().multiply(1, 0, 1).normalize().scale(entitypatch.getOriginal().getBbWidth() * 0.75)));
                             }
 
-                            if (ParCoolConfig.Client.Booleans.EnableActionSounds.get()) {
-                                entitypatch.getOriginal().playSound(com.alrex.parcool.api.SoundEvents.HANG_DOWN_JUMP.get(), 1f, 1f);
+                            if (ParCool.getConfig().client().enableActionSounds.get()) {
+                                entitypatch.getOriginal().playSound(ParCoolSoundEvents.LONG_JUMP.get(), 1f, 1f);
                             }
 
                             entitypatch.getAnimator().reserveAnimation(BIPED_JUMP_FROM_BAR);
@@ -1128,7 +1126,7 @@ public class ParCoolAnimations {
                 .addEvents(StaticAnimationProperty.ON_BEGIN_EVENTS, SimpleEvent.create(ReusableSources.PLAY_HANG_MOVE_SOUND, AnimationEvent.Side.CLIENT),SimpleEvent.create(Animations.ReusableSources.SET_TOOLS_BACK, Side.CLIENT))
                 .addEvents(StaticAnimationProperty.ON_END_EVENTS, AnimationEvent.SimpleEvent.<AnimationEvent.E1<Boolean>>create((entitypatch, animation, params) -> {
                     if (params.first() && entitypatch instanceof PlayerPatch<?> playerpatch && playerpatch.isEpicFightMode()) {
-                        if (Minecraft.getInstance().options.keyUp.isDown() && KeyBindings.getKeyHangDown().isDown()) {
+                        if (Minecraft.getInstance().options.keyUp.isDown() && ParCoolKeyBinds.HANG.key().isDown()) {
                             playerpatch.reserveAnimation(BIPED_HANG_DOWN_MOVE_FORWARD_CROSS1);
                         } else {
                             playerpatch.reserveAnimation(BIPED_HANG_DOWN_MOVE_FORWARD_END1);
@@ -1148,7 +1146,7 @@ public class ParCoolAnimations {
                         movement = movement.add(BIPED_HANG_DOWN_MOVE_FORWARD_END2.get().getExpectedMovement(entitypatch, BIPED_HANG_DOWN_MOVE_FORWARD_END2.get().getTotalTime()));
                         Vec3 hangDownDest = ParCoolUtils.getHangableBars(entitypatch.getOriginal(), movement);
 
-                        if (Minecraft.getInstance().options.keyUp.isDown() && KeyBindings.getKeyHangDown().isDown() && hangDownDest != null) {
+                        if (Minecraft.getInstance().options.keyUp.isDown() && ParCoolKeyBinds.HANG.key().isDown() && hangDownDest != null) {
                             playerpatch.reserveAnimation(BIPED_HANG_DOWN_MOVE_FORWARD_CROSS2);
                         } else {
                             playerpatch.reserveAnimation(BIPED_HANG_DOWN_MOVE_FORWARD_END2);
@@ -1168,7 +1166,7 @@ public class ParCoolAnimations {
                         movement = movement.add(BIPED_HANG_DOWN_MOVE_FORWARD_END1.get().getExpectedMovement(entitypatch, BIPED_HANG_DOWN_MOVE_FORWARD_END1.get().getTotalTime()));
                         Vec3 hangDownDest = ParCoolUtils.getHangableBars(entitypatch.getOriginal(), movement);
 
-                        if (Minecraft.getInstance().options.keyUp.isDown() && KeyBindings.getKeyHangDown().isDown() && hangDownDest != null) {
+                        if (Minecraft.getInstance().options.keyUp.isDown() && ParCoolKeyBinds.HANG.key().isDown() && hangDownDest != null) {
                             playerpatch.reserveAnimation(BIPED_HANG_DOWN_MOVE_FORWARD_CROSS1);
                         } else {
                             playerpatch.reserveAnimation(BIPED_HANG_DOWN_MOVE_FORWARD_END1);
@@ -1252,12 +1250,12 @@ public class ParCoolAnimations {
 
             if (entitypatch instanceof LocalPlayerPatch localPlayerPatch) {
                 Parkourability parkourability = Parkourability.get(localPlayerPatch.getOriginal());
-                parkourability.get(ClingToCliff.class).finish(localPlayerPatch.getOriginal());
+                parkourability.get(ParCoolActions.HANG_ON).finish();
                 entitypatch.getOriginal().setDeltaMovement(motion.x() + jumpMotion.x(), ySpeed, motion.z() + jumpMotion.z());
             }
 
-            if (ParCoolConfig.Client.Booleans.EnableActionSounds.get()) {
-                entitypatch.getOriginal().playSound(com.alrex.parcool.api.SoundEvents.WALL_JUMP.get(), 1f, 1f);
+            if (ParCool.getConfig().client().enableActionSounds.get()) {
+                entitypatch.getOriginal().playSound(ParCoolSoundEvents.WALL_JUMP.get(), 1f, 1f);
             }
 
             if (animation == BIPED_WALL_JUMP_LEFT_START) {

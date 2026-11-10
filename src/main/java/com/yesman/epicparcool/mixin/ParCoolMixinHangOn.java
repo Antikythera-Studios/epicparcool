@@ -3,34 +3,26 @@ package com.yesman.epicparcool.mixin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import com.alrex.parcool.common.action.impl.ClingToCliff;
-import com.alrex.parcool.common.attachment.common.Parkourability;
+import com.alrex.parcool.api.action.ContinuableAction;
+import com.alrex.parcool.common.action.impl.HangOn;
 import com.yesman.epicparcool.animations.ParCoolAnimations;
 
-import net.minecraft.world.entity.player.Player;
-import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import yesman.epicfight.api.animation.types.StaticAnimation;
 import yesman.epicfight.api.asset.AssetAccessor;
 import yesman.epicfight.world.capabilities.EpicFightCapabilities;
 import yesman.epicfight.world.capabilities.entitypatch.player.PlayerPatch;
 
-@Mixin(value = ClingToCliff.class)
-public class ParCoolMixinClingToCliff {
-	@Inject(at = @At(value = "HEAD"), method = "onRenderTick(Lnet/neoforged/neoforge/client/event/RenderFrameEvent;Lnet/minecraft/world/entity/player/Player;Lcom/alrex/parcool/common/attachment/common/Parkourability;)V", cancellable = true, remap = false)
-	public void epicparcool$onRenderTick(RenderFrameEvent event, Player player, Parkourability parkourability, CallbackInfo callback) {
-		PlayerPatch<?> playerpatch = EpicFightCapabilities.getEntityPatch(player, PlayerPatch.class);
-		
-		if (playerpatch != null && playerpatch.isEpicFightMode()) {
-			callback.cancel();
-		}
+@Mixin(value = HangOn.class)
+public abstract class ParCoolMixinHangOn extends ContinuableAction {
+	private ParCoolMixinHangOn() {
+		super(null, null);
 	}
 	
-	@Inject(at = @At(value = "HEAD"), method = "canContinue(Lnet/minecraft/world/entity/player/Player;Lcom/alrex/parcool/common/attachment/common/Parkourability;)Z", cancellable = true, remap = false)
-	public void epicparcool$canContinue(Player player, Parkourability parkourability, CallbackInfoReturnable<Boolean> callback) {
-		PlayerPatch<?> playerpatch = EpicFightCapabilities.getEntityPatch(player, PlayerPatch.class);
+	@Inject(at = @At(value = "HEAD"), method = "canContinue()Z", cancellable = true, remap = false)
+	public void epicparcool$canContinue(CallbackInfoReturnable<Boolean> callback) {
+		PlayerPatch<?> playerpatch = EpicFightCapabilities.getEntityPatch(this.parkourability.player(), PlayerPatch.class);
 		
 		if (playerpatch != null && playerpatch.isEpicFightMode()) {
 			AssetAccessor<? extends StaticAnimation> nowPlaying = playerpatch.getAnimator().getPlayerFor(null).getRealAnimation();
@@ -49,7 +41,6 @@ public class ParCoolMixinClingToCliff {
 				nowPlaying == ParCoolAnimations.BIPED_CLING_MOVE_RIGHT_OUTER_CORNER2
 			) {
 				callback.setReturnValue(true);
-				callback.cancel();
 			}
 		}
 	}

@@ -4,19 +4,19 @@
 	"compatibilityLevel": "JAVA_21",
 	"package": "com.yesman.epicparcool.mixin",
 	"client": [
-		"ParCoolMixinKongVaultAnimator",
-		"ParCoolMixinSpeedVaultAnimator",
-		"ParCoolMixinDiveAnimationHostAnimator",
-		"ParCoolMixinHorizontalWallRunAnimator",
 		"ParCoolMixinChargeJump",
-		"ParCoolMixinHideInBlockAnimator",
 		"EpicFightMixinLayer"
 	],
 	"mixins": [
-		"ParCoolMixinActionProcessor",
-		"ParCoolMixinAnimation",
-		"ParCoolMixinClingToCliff",
-		"ParCoolMixinRideZiplineAccessor"
+		"ParCoolMixinAction",
+		"ParCoolMixinBreakfallAccessor",
+		"ParCoolMixinHangDownAccessor",
+		"ParCoolMixinHangOn",
+		"ParCoolMixinHideInBlockAccessor",
+		"ParCoolMixinHorizontalWallRunAccessor",
+		"ParCoolMixinRideZiplineAccessor",
+		"ParCoolMixinVaultAccessor",
+		"ParCoolMixinWallJumpAccessor"
 	],
 	"injector": {
 		"defaultRequire": 1

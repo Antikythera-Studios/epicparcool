@@ -5,11 +5,11 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import com.alrex.parcool.client.input.KeyBindings;
+import com.alrex.parcool.client.input.ParCoolKeyBinds;
 import com.alrex.parcool.common.action.impl.HangDown;
-import com.alrex.parcool.common.action.impl.HangDown.BarAxis;
-import com.alrex.parcool.utilities.VectorUtil;
+import com.alrex.parcool.util.VectorUtil;
 import com.yesman.epicparcool.animations.ParCoolAnimations;
+import com.yesman.epicparcool.mixin.ParCoolMixinHangDownAccessor;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -58,6 +58,16 @@ public class ParCoolUtils {
 		return (float)VectorUtil.toYawDegree(idealLookVec.yRot((float) differenceAngle));
 	};
 	
+	public static boolean isOrthogonalToBar(HangDown action) {
+		return action.getBlendFactorOrthogonalToBar(1.0F) > 0.5F;
+	}
+
+	@Nullable
+	public static BarAxis getHangingBarAxis(HangDown action) {
+		Object axis = ((ParCoolMixinHangDownAccessor)action).getHangingBarAxis().get();
+		return axis == null ? null : BarAxis.valueOf(((Enum<?>)axis).name());
+	}
+
 	@SuppressWarnings("incomplete-switch")
 	public static Vec3 getHangableBars(LivingEntity entity, Vec3 simulateNextPos) {
 		Vec3 entityPos = entity.position();
@@ -103,7 +113,7 @@ public class ParCoolUtils {
 		
 		BlockState state = entity.getCommandSenderWorld().getBlockState(pos);
 		Block block = state.getBlock();
-		HangDown.BarAxis axis = null;
+		BarAxis axis = null;
 		
 		if (block instanceof RotatedPillarBlock) { // Chain
 			if (state.isCollisionShapeFullBlock(entity.getCommandSenderWorld(), pos)) {
@@ -117,10 +127,10 @@ public class ParCoolUtils {
 			Direction.Axis pillarAxis = state.getValue(RotatedPillarBlock.AXIS);
 			switch (pillarAxis) {
 				case X:
-					axis = HangDown.BarAxis.X;
+					axis = BarAxis.X;
 					break;
 				case Z:
-					axis = HangDown.BarAxis.Z;
+					axis = BarAxis.Z;
 					break;
 			}
 		} else if (block instanceof DirectionalBlock) { // End rod, lighting rod
@@ -136,11 +146,11 @@ public class ParCoolUtils {
 			switch (direction) {
 				case EAST:
 				case WEST:
-					axis = HangDown.BarAxis.X;
+					axis = BarAxis.X;
 					break;
 				case NORTH:
 				case SOUTH:
-					axis = HangDown.BarAxis.Z;
+					axis = BarAxis.Z;
 			}
 		} else if (block instanceof CrossCollisionBlock) { // Iron Bars, Fence, Stained glass
 			int zCount = 0;
@@ -149,8 +159,8 @@ public class ParCoolUtils {
 			if (state.getValue(CrossCollisionBlock.SOUTH)) zCount++;
 			if (state.getValue(CrossCollisionBlock.EAST)) xCount++;
 			if (state.getValue(CrossCollisionBlock.WEST)) xCount++;
-			if (zCount > 0 && xCount == 0) axis = HangDown.BarAxis.Z;
-			if (xCount > 0 && zCount == 0) axis = HangDown.BarAxis.X;
+			if (zCount > 0 && xCount == 0) axis = BarAxis.Z;
+			if (xCount > 0 && zCount == 0) axis = BarAxis.X;
 		} else if (block instanceof WallBlock) { // All types of wall blocks
 			int zCount = 0;
 			int xCount = 0;
@@ -158,8 +168,8 @@ public class ParCoolUtils {
 			if (state.getValue(WallBlock.SOUTH_WALL) != WallSide.NONE) zCount++;
 			if (state.getValue(WallBlock.EAST_WALL) != WallSide.NONE) xCount++;
 			if (state.getValue(WallBlock.WEST_WALL) != WallSide.NONE) xCount++;
-			if (zCount > 0 && xCount == 0) axis = HangDown.BarAxis.Z;
-			if (xCount > 0 && zCount == 0) axis = HangDown.BarAxis.X;
+			if (zCount > 0 && xCount == 0) axis = BarAxis.Z;
+			if (xCount > 0 && zCount == 0) axis = BarAxis.X;
 		}
 		
 		Vec3 simulatedDestPosition = entity.position();
@@ -468,7 +478,7 @@ public class ParCoolUtils {
     
 	@Nullable
 	public static boolean scanTerrainAndStartClingAction(PlayerPatch<?> playerpatch, WallMoveType moveType) {
-		if (!KeyBindings.getKeyGrabWall().isDown()) {
+		if (!ParCoolKeyBinds.HANG.state().isDown()) {
 			return false;
 		}
 		
@@ -640,5 +650,9 @@ public class ParCoolUtils {
 	
 	public enum WallMoveType {
 		CLING_START, MOVE_LEFT, MOVE_RIGHT;
+	}
+	
+	public enum BarAxis {
+		X, Z;
 	}
 }
