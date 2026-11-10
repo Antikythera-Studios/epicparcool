@@ -1,41 +1,26 @@
 package com.yesman.epicparcool.client.event;
 
-import java.nio.ByteBuffer;
 import java.util.Map;
 
-import com.alrex.parcool.client.animation.impl.ClingToCliffAnimator;
-import com.alrex.parcool.client.animation.impl.DiveAnimationHostAnimator;
-import com.alrex.parcool.client.animation.impl.FastRunningAnimator;
-import com.alrex.parcool.client.animation.impl.HangAnimator;
-import com.alrex.parcool.client.animation.impl.HideInBlockAnimator;
-import com.alrex.parcool.client.animation.impl.HorizontalWallRunAnimator;
-import com.alrex.parcool.client.animation.impl.JumpChargingAnimator;
-import com.alrex.parcool.client.animation.impl.RideZiplineAnimator;
-import com.alrex.parcool.client.animation.impl.SlidingAnimator;
-import com.alrex.parcool.client.animation.impl.WallSlideAnimator;
-import com.alrex.parcool.common.action.impl.ClimbUp;
-import com.alrex.parcool.common.action.impl.ClingToCliff;
+import com.alrex.parcool.api.action.Action;
+import com.alrex.parcool.api.action.ActionEntry;
+import com.alrex.parcool.api.action.ContinuableAction;
+import com.alrex.parcool.common.Parkourability;
+import com.alrex.parcool.common.action.ParCoolActions;
 import com.alrex.parcool.common.action.impl.HangDown;
-import com.alrex.parcool.common.action.impl.HangDown.BarAxis;
-import com.alrex.parcool.common.action.impl.JumpFromBar;
+import com.alrex.parcool.common.action.impl.HangOn;
 import com.alrex.parcool.common.action.impl.RideZipline;
-import com.alrex.parcool.common.action.impl.VerticalWallRun;
-import com.alrex.parcool.common.action.impl.WallJump;
-import com.alrex.parcool.common.action.impl.WallSlide;
-import com.alrex.parcool.common.attachment.client.Animation;
-import com.alrex.parcool.common.attachment.common.Parkourability;
-import com.alrex.parcool.utilities.VectorUtil;
+import com.alrex.parcool.common.action.impl.SlideDown;
+import com.alrex.parcool.util.VectorUtil;
 import com.google.common.collect.Maps;
 import com.yesman.epicparcool.EpicParCool;
 import com.yesman.epicparcool.ParCoolUtils;
+import com.yesman.epicparcool.ParCoolUtils.BarAxis;
 import com.yesman.epicparcool.ParCoolUtils.ClingType;
 import com.yesman.epicparcool.ParcoolLivingMotions;
 import com.yesman.epicparcool.animations.ParCoolAnimations;
-import com.yesman.epicparcool.mixin.ParCoolMixinAnimation;
-import com.yesman.epicparcool.mixin.ParCoolMixinDiveAnimationHostAnimator;
-import com.yesman.epicparcool.mixin.ParCoolMixinHideInBlockAnimator;
-import com.yesman.epicparcool.mixin.ParCoolMixinHorizontalWallRunAnimator;
-import com.yesman.epicparcool.mixin.ParCoolMixinRideZiplineAccessor;
+import com.yesman.epicparcool.mixin.ParCoolMixinHideInBlockAccessor;
+import com.yesman.epicparcool.mixin.ParCoolMixinHorizontalWallRunAccessor;
 
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
@@ -61,37 +46,34 @@ import yesman.epicfight.world.capabilities.entitypatch.player.PlayerPatch;
 public class ParCoolClientEvents {
 	@FunctionalInterface
 	public interface LifecycleAnimationLinker {
-		void accept(com.alrex.parcool.client.animation.Animator animator, Parkourability parkourability, ModifyPlayerLivingMotionEvent.BaseLayer animationUpdateEvent);
+		void accept(Action action, Parkourability parkourability, ModifyPlayerLivingMotionEvent.BaseLayer animationUpdateEvent);
 	}
 	
-	private static final Map<Class<? extends com.alrex.parcool.client.animation.Animator>, LifecycleAnimationLinker> PARCOOL_ANIMATOR_MAPPING = Maps.newHashMap();
-	private static final ByteBuffer DUMMY_BUFFER = ByteBuffer.allocate(128);
+	private static final Map<ActionEntry<? extends ContinuableAction>, LifecycleAnimationLinker> PARCOOL_ANIMATOR_MAPPING = Maps.newLinkedHashMap();
 	
 	//Mod bus event
 	public static void onSetup(FMLClientSetupEvent event) {
 		PARCOOL_ANIMATOR_MAPPING.clear();
 		
-		PARCOOL_ANIMATOR_MAPPING.put(JumpChargingAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.CHARGE_JUMP, (action, parkourability, livingMotionUpdateEvent) -> {
 			livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CAT_LEAP_PREPARATION);
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(ClingToCliffAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.HANG_ON, (action, parkourability, livingMotionUpdateEvent) -> {
 			livingMotionUpdateEvent.getPlayerPatch().getAnimator().getVariables().getSharedVariable(ParCoolAnimations.CLING_TYPE).ifPresentOrElse((clingDirection) -> {
 				if (clingDirection == ClingType.OUTER_CORNER) {
 					livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CLING_TO_CLIFF_OUTER_CORNER);
 				} else if (clingDirection == ClingType.INNER_CORNER) {
 					livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CLING_TO_CLIFF_INNER_CORNER);
 				} else {
-					switch (parkourability.get(ClingToCliff.class).getFacingDirection()) {
-					case ToWall -> {
-						livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CLING_TO_CLIFF);
-					}
-					case LeftAgainstWall -> {
-						livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CLING_TO_CLIFF_LEFT);			
-					}
-					case RightAgainstWall -> {
+					HangOn hangOn = (HangOn)action;
+					
+					if (hangOn.getBlendFactorLeftToWall() > 0.5F) {
+						livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CLING_TO_CLIFF_LEFT);
+					} else if (hangOn.getBlendFactorRightToWall() > 0.5F) {
 						livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CLING_TO_CLIFF_RIGHT);
-					}
+					} else {
+						livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CLING_TO_CLIFF);
 					}
 				}
 			}, () -> {
@@ -99,20 +81,20 @@ public class ParCoolClientEvents {
 			});
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(DiveAnimationHostAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
-			if (livingMotionUpdateEvent.getPlayerPatch().getOriginal().isFallFlying()) {
-				return;
-			}
-			
-			if (((ParCoolMixinDiveAnimationHostAnimator)animator).getSkyDiveAnimator() != null) {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.SKYDIVE, (action, parkourability, livingMotionUpdateEvent) -> {
+			if (!livingMotionUpdateEvent.getPlayerPatch().getOriginal().isFallFlying()) {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.SKY_DIVE);
-			} else {
+			}
+		});
+		
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.DIVE, (action, parkourability, livingMotionUpdateEvent) -> {
+			if (!livingMotionUpdateEvent.getPlayerPatch().getOriginal().isFallFlying()) {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.DIVE);
 			}
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(WallSlideAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
-			Vec3 wall = parkourability.get(WallSlide.class).getLeanedWallDirection();
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.SLIDE_DOWN, (action, parkourability, livingMotionUpdateEvent) -> {
+			Vec3 wall = ((SlideDown)action).getWallVec(1.0F);
 			
 			if (wall == null) {
 				return;
@@ -129,41 +111,39 @@ public class ParCoolClientEvents {
 			}
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(HorizontalWallRunAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
-			if (((ParCoolMixinHorizontalWallRunAnimator)animator).getWallIsRightSide()) {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.HORIZONTAL_WALL_RUN, (action, parkourability, livingMotionUpdateEvent) -> {
+			if (!Boolean.TRUE.equals(((ParCoolMixinHorizontalWallRunAccessor)action).getLeftToWall().get())) {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.WALL_RUNNING_RIGHT);
 			} else {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.WALL_RUNNING_LEFT);
 			}
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(FastRunningAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.FAST_RUN, (action, parkourability, livingMotionUpdateEvent) -> {
 			if (livingMotionUpdateEvent.getMotion() == LivingMotions.RUN) {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.FAST_RUN);
 			}
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(HangAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
-			HangDown hangDown = parkourability.get(HangDown.class);
-			
-			if (hangDown.isOrthogonalToBar()) {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.HANG_DOWN, (action, parkourability, livingMotionUpdateEvent) -> {
+			if (ParCoolUtils.isOrthogonalToBar((HangDown)action)) {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.HANG_DOWN_ORTHOGONAL);
 			} else {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.HANG_DOWN);
 			}
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(SlidingAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.SLIDE, (action, parkourability, livingMotionUpdateEvent) -> {
 			livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.SLIDING);
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(HideInBlockAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
-			if (!((ParCoolMixinHideInBlockAnimator)animator).getStanding()) {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.HIDE_IN_BLOCK, (action, parkourability, livingMotionUpdateEvent) -> {
+			if (Boolean.FALSE.equals(((ParCoolMixinHideInBlockAccessor)action).getStanding().get())) {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.HIDE_IN_BLOCK_HORIZONTAL);
 			}
 		});
 		
-		PARCOOL_ANIMATOR_MAPPING.put(RideZiplineAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.RIDE_ZIPLINE, (action, parkourability, livingMotionUpdateEvent) -> {
 			LivingMotion oldMotion = livingMotionUpdateEvent.getPlayerPatch().getClientAnimator().currentMotion();
 			
 			if (oldMotion == ParcoolLivingMotions.RIDE_ZIPLINE_FORWARD || oldMotion == ParcoolLivingMotions.RIDE_ZIPLINE_SIDE) {
@@ -171,11 +151,16 @@ public class ParCoolClientEvents {
 				return;
 			}
 			
-			ParCoolMixinRideZiplineAccessor action = (ParCoolMixinRideZiplineAccessor)parkourability.get(RideZipline.class);
-			Vec3 offset = action.getEndOffsetFromStart().normalize();
+			Vec3 offset = ((RideZipline)action).getZiplineOffset();
+			
+			if (offset == null) {
+				return;
+			}
+			
+			offset = offset.normalize();
 			Vec3 lookVec = VectorUtil.fromYawDegree(livingMotionUpdateEvent.getPlayerPatch().getOriginal().getYRot());
 			double dot = offset.dot(lookVec);
-			double yRot = VectorUtil.toYaw(offset);
+			double yRot = VectorUtil.toYawDegree(offset);
 			
 			if (Math.abs(dot) > 0.5D) {
 				livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.RIDE_ZIPLINE_FORWARD);
@@ -191,7 +176,7 @@ public class ParCoolClientEvents {
 		});
 		
 		/**
-		PARCOOL_ANIMATOR_MAPPING.put(CrawlAnimator.class, (animator, parkourability, livingMotionUpdateEvent) -> {
+		PARCOOL_ANIMATOR_MAPPING.put(ParCoolActions.CRAWL, (action, parkourability, livingMotionUpdateEvent) -> {
 			livingMotionUpdateEvent.setMotion(ParcoolLivingMotions.CRAWL);
 		});
 		**/
@@ -204,33 +189,24 @@ public class ParCoolClientEvents {
 		if (skillexecuteevent.getSkillContainer().getSkill() == EpicFightSkills.PHANTOM_ASCENT.get()) {
 			Parkourability parkourability = Parkourability.get(playerpatch.getOriginal());
 			
-			if (parkourability.get(ClingToCliff.class).isDoing() || parkourability.get(ClimbUp.class).isDoing()) {
+			if (parkourability.get(ParCoolActions.HANG_ON).isDoing() || parkourability.get(ParCoolActions.CLIMB_UP).isDoing()) {
                 skillexecuteevent.cancel();
 				return;
 			}
 			
-			DUMMY_BUFFER.clear();
-			
-			if (parkourability.get(WallJump.class).canStart(playerpatch.getOriginal(), parkourability, DUMMY_BUFFER)) {
-				DUMMY_BUFFER.flip();
+			if (parkourability.get(ParCoolActions.WALL_JUMP).canStart()) {
 				skillexecuteevent.cancel();
 				skillexecuteevent.getSkillContainer().getDataManager().setData(EpicFightSkillDataKeys.JUMP_KEY_PRESSED_LAST_TICK, true);
 				return;
 			}
 			
-			DUMMY_BUFFER.clear();
-			
-			if (parkourability.get(VerticalWallRun.class).canStart(playerpatch.getOriginal(), parkourability, DUMMY_BUFFER)) {
-				DUMMY_BUFFER.flip();
+			if (parkourability.get(ParCoolActions.WALL_RUN).canStart()) {
 				skillexecuteevent.cancel();
 				skillexecuteevent.getSkillContainer().getDataManager().setData(EpicFightSkillDataKeys.JUMP_KEY_PRESSED_LAST_TICK, true);
 				return;
 			}
 			
-			DUMMY_BUFFER.clear();
-			
-			if (parkourability.get(JumpFromBar.class).canStart(playerpatch.getOriginal(), parkourability, DUMMY_BUFFER)) {
-				DUMMY_BUFFER.flip();
+			if (parkourability.get(ParCoolActions.HANG_DOWN).isDoing()) {
 				skillexecuteevent.cancel();
 				skillexecuteevent.getSkillContainer().getDataManager().setData(EpicFightSkillDataKeys.JUMP_KEY_PRESSED_LAST_TICK, true);
 			}
@@ -242,17 +218,18 @@ public class ParCoolClientEvents {
 			return;
 		}
 		
-		Animation animation = Animation.get(event.getPlayerPatch().getOriginal());
+		Parkourability parkourability = Parkourability.get(event.getPlayerPatch().getOriginal());
 		
-		if (animation != null) {
-			ParCoolMixinAnimation animationAccessor = (ParCoolMixinAnimation)animation;
-			com.alrex.parcool.client.animation.Animator animator = animationAccessor.getAnimator();
-			Parkourability parkourability = Parkourability.get(event.getPlayerPatch().getOriginal());
+		if (parkourability == null) {
+			return;
+		}
+		
+		for (Map.Entry<ActionEntry<? extends ContinuableAction>, LifecycleAnimationLinker> entry : PARCOOL_ANIMATOR_MAPPING.entrySet()) {
+			ContinuableAction action = parkourability.get(entry.getKey());
 			
-			if (parkourability != null && animator != null && PARCOOL_ANIMATOR_MAPPING.containsKey(animator.getClass())) {
-				if (!animator.shouldRemoved(event.getPlayerPatch().getOriginal(), parkourability)) {
-					PARCOOL_ANIMATOR_MAPPING.get(animator.getClass()).accept(animator, parkourability, event);
-				}
+			if (action.isDoing()) {
+				entry.getValue().accept(action, parkourability, event);
+				return;
 			}
 		}
 	}
@@ -268,13 +245,13 @@ public class ParCoolClientEvents {
 		Parkourability parkourability = Parkourability.get(event.getEntity());
 		HangDown hangDown;
 		
-		if ((hangDown = (HangDown)parkourability.get(HangDown.class)) != null && hangDown.isDoing()) {
+		if ((hangDown = parkourability.get(ParCoolActions.HANG_DOWN)) != null && hangDown.isDoing()) {
 			if (!playerpatch.getEntityState().inaction()) {
 				float yRot = ParCoolUtils.idealYRotForHanging(hangDown, event.getEntity());
-				BarAxis barAxis = hangDown.getHangingBarAxis();
+				BarAxis barAxis = ParCoolUtils.getHangingBarAxis(hangDown);
 				boolean axisMismatches = false;
 				
-				if (hangDown.isOrthogonalToBar()) {
+				if (ParCoolUtils.isOrthogonalToBar(hangDown)) {
 					if (barAxis == ParCoolUtils.getLookBarAxis(yRot)) {
 						axisMismatches = true;
 					}
@@ -289,7 +266,7 @@ public class ParCoolClientEvents {
 					AssetAccessor<? extends ActionAnimation> animationAccessor = null;
 					AssetAccessor<? extends ActionAnimation> endAnimationAccessor = null;
 					
-					if (hangDown.isOrthogonalToBar()) {
+					if (ParCoolUtils.isOrthogonalToBar(hangDown)) {
 						if (event.getInput().left) {
 							animationAccessor = ParCoolAnimations.BIPED_HANG_DOWN_MOVE_LEFT;
 						} else if (event.getInput().right) {
@@ -327,7 +304,7 @@ public class ParCoolClientEvents {
 			event.getInput().forwardImpulse = 0.0F;
 			event.getInput().leftImpulse = 0.0F;
 			event.getEntity().setDeltaMovement(0, 0, 0);
-		} else if (parkourability.get(ClingToCliff.class).isDoing()) {
+		} else if (parkourability.get(ParCoolActions.HANG_ON).isDoing()) {
 			if (!playerpatch.getEntityState().inaction()) {
 				if (event.getInput().left) {
 					ParCoolUtils.scanTerrainAndStartClingAction(playerpatch, ParCoolUtils.WallMoveType.MOVE_LEFT);

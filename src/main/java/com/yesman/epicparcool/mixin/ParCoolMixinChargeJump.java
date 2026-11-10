@@ -16,7 +16,7 @@ public class ParCoolMixinChargeJump {
 			value = "INVOKE",
 			target = "Lnet/minecraft/client/player/LocalPlayer;isShiftKeyDown()Z"
 		),
-		method = "onClientTick(Lnet/minecraft/world/entity/player/Player;Lcom/alrex/parcool/common/attachment/common/Parkourability;)V",
+		method = "isInputActive()Z",
 		remap = false
 	)
 	private boolean epicparcool$isShiftKeyDown(LocalPlayer self) {

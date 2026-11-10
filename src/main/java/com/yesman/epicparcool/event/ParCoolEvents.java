@@ -1,34 +1,36 @@
 package com.yesman.epicparcool.event;
 
-import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.function.BiFunction;
 
-import com.alrex.parcool.api.unstable.action.ParCoolActionEvent;
-import com.alrex.parcool.client.input.KeyBindings;
-import com.alrex.parcool.common.action.Action;
-import com.alrex.parcool.common.action.impl.CatLeap;
+import com.alrex.parcool.api.action.Action;
+import com.alrex.parcool.api.action.ParCoolActionEvent;
+import com.alrex.parcool.client.input.ParCoolKeyBinds;
+import com.alrex.parcool.common.Parkourability;
+import com.alrex.parcool.common.action.ParCoolActions;
+import com.alrex.parcool.common.action.impl.Breakfall;
 import com.alrex.parcool.common.action.impl.ChargeJump;
 import com.alrex.parcool.common.action.impl.ClimbUp;
-import com.alrex.parcool.common.action.impl.ClingToCliff;
-import com.alrex.parcool.common.action.impl.Crawl;
 import com.alrex.parcool.common.action.impl.Dodge;
-import com.alrex.parcool.common.action.impl.Flipping;
 import com.alrex.parcool.common.action.impl.HangDown;
-import com.alrex.parcool.common.action.impl.JumpFromBar;
-import com.alrex.parcool.common.action.impl.Roll;
-import com.alrex.parcool.common.action.impl.Slide;
+import com.alrex.parcool.common.action.impl.HangOn;
+import com.alrex.parcool.common.action.impl.LongJump;
+import com.alrex.parcool.common.action.impl.TrickJump;
 import com.alrex.parcool.common.action.impl.Vault;
-import com.alrex.parcool.common.action.impl.VerticalWallRun;
 import com.alrex.parcool.common.action.impl.WallJump;
-import com.alrex.parcool.common.attachment.common.Parkourability;
+import com.alrex.parcool.common.action.impl.WallRun;
+import com.alrex.parcool.util.EntityUtil;
 import com.google.common.collect.Maps;
 import com.yesman.epicparcool.EpicParCool;
 import com.yesman.epicparcool.ParCoolUtils;
 import com.yesman.epicparcool.ParcoolLivingMotions;
 import com.yesman.epicparcool.animations.ParCoolAnimations;
+import com.yesman.epicparcool.mixin.ParCoolMixinBreakfallAccessor;
+import com.yesman.epicparcool.mixin.ParCoolMixinVaultAccessor;
+import com.yesman.epicparcool.mixin.ParCoolMixinWallJumpAccessor;
 
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -45,30 +47,33 @@ import yesman.epicfight.world.capabilities.entitypatch.player.PlayerPatch;
 
 @EventBusSubscriber(modid = EpicParCool.MODID)
 public class ParCoolEvents {
-    private static final Map<Class<? extends com.alrex.parcool.common.action.Action>, BiFunction<PlayerPatch<?>, ParCoolActionEvent.StartEvent, AssetAccessor<? extends StaticAnimation>>> PARCOOL_ACTION_START_MAPPING = Maps.newHashMap();
-    private static final Map<Class<? extends com.alrex.parcool.common.action.Action>, BiFunction<PlayerPatch<?>, Action, Boolean>> PARCOOL_ACTION_CANCEL_EVENTS = Maps.newHashMap();
-    private static final ByteBuffer DUMMY_BUFFER = ByteBuffer.allocate(128);
+    private static final Map<Class<? extends com.alrex.parcool.api.action.Action>, BiFunction<PlayerPatch<?>, ParCoolActionEvent.Start.Post, AssetAccessor<? extends StaticAnimation>>> PARCOOL_ACTION_START_MAPPING = Maps.newHashMap();
+    private static final Map<Class<? extends com.alrex.parcool.api.action.Action>, BiFunction<PlayerPatch<?>, Action, Boolean>> PARCOOL_ACTION_CANCEL_EVENTS = Maps.newHashMap();
 
     //Mod bus event
     public static void onSetup(FMLCommonSetupEvent event) {
         PARCOOL_ACTION_START_MAPPING.clear();
         PARCOOL_ACTION_CANCEL_EVENTS.clear();
 
-        PARCOOL_ACTION_START_MAPPING.put(CatLeap.class, (playerpatch, startEvent) -> {
+        PARCOOL_ACTION_START_MAPPING.put(LongJump.class, (playerpatch, startEvent) -> {
             Parkourability parkourability = Parkourability.get(startEvent.getPlayer());
 
-            if (parkourability.get(Slide.class).isDoing() || parkourability.get(Crawl.class).isDoing()) {
+            if (parkourability.get(ParCoolActions.SLIDE).isDoing() || parkourability.get(ParCoolActions.CRAWL).isDoing()) {
                 return null;
             }
 
             return ParCoolAnimations.BIPED_CAT_LEAP;
         });
 
-        PARCOOL_ACTION_START_MAPPING.put(Roll.class, (playerpatch, startEvent) -> {
+        PARCOOL_ACTION_START_MAPPING.put(Breakfall.class, (playerpatch, startEvent) -> {
+            if (((ParCoolMixinBreakfallAccessor)startEvent.getAction()).getWorkingBreakfallType().get() != Breakfall.BreakfallType.ROLL) {
+                return null;
+            }
+
             return ParCoolAnimations.BIPED_ROLL_FORWARD;
         });
 
-        PARCOOL_ACTION_START_MAPPING.put(Flipping.class, (playerpatch, startEvent) -> {
+        PARCOOL_ACTION_START_MAPPING.put(TrickJump.class, (playerpatch, startEvent) -> {
             LocalPlayer clientPlayer = (LocalPlayer)startEvent.getPlayer();
 
             if (clientPlayer.input.forwardImpulse < 0.0F) {
@@ -82,7 +87,7 @@ public class ParCoolEvents {
             HangDown action = ((HangDown)startEvent.getAction());
             float yRot = ParCoolUtils.idealYRotForHanging(action, startEvent.getPlayer());
 
-            if (action.isOrthogonalToBar()) {
+            if (ParCoolUtils.isOrthogonalToBar(action)) {
                 playerpatch.setModelYRot(yRot, true);
                 return ParCoolAnimations.BIPED_HANG_DOWN_INERTIA_ORTHOGONAL;
             } else {
@@ -92,16 +97,22 @@ public class ParCoolEvents {
         });
 
         PARCOOL_ACTION_START_MAPPING.put(Vault.class, (playerpatch, startEvent) -> {
-            Vault.AnimationType type = ((Vault)startEvent.getAction()).getCurrentAnimation();
+            Object vaultType = ((ParCoolMixinVaultAccessor)startEvent.getAction()).getVaultType().get();
 
-            switch (type) {
-            case KONG_VAULT -> {
+            if (vaultType == null) {
                 return ParCoolAnimations.BIPED_VAULT_FORWARD;
             }
-            case SPEED_VAULT_LEFT -> {
+
+            String type = ((Enum<?>)vaultType).name();
+
+            switch (type) {
+            case "FORWARD" -> {
+                return ParCoolAnimations.BIPED_VAULT_FORWARD;
+            }
+            case "LEFT" -> {
                 return ParCoolAnimations.BIPED_VAULT_LEFT;
             }
-            case SPEED_VAULT_RIGHT -> {
+            case "RIGHT" -> {
                 return ParCoolAnimations.BIPED_VAULT_RIGHT;
             }
             default -> {
@@ -139,29 +150,12 @@ public class ParCoolEvents {
             return rollAnimation;
         });
 
-        PARCOOL_ACTION_START_MAPPING.put(VerticalWallRun.class, (playerpatch, startEvent) -> {
+        PARCOOL_ACTION_START_MAPPING.put(WallRun.class, (playerpatch, startEvent) -> {
             return ParCoolAnimations.BIPED_WALL_RUN_VERTICAL;
         });
 
         PARCOOL_ACTION_CANCEL_EVENTS.put(ClimbUp.class, (playerpatch, action) -> {
             if (playerpatch.getEntityState().inaction()) {
-                return true;
-            }
-
-            return false;
-        });
-
-        PARCOOL_ACTION_CANCEL_EVENTS.put(JumpFromBar.class, (playerpatch, action) -> {
-            Parkourability parkourability = Parkourability.get(playerpatch.getOriginal());
-            DUMMY_BUFFER.clear();
-
-            if (parkourability.get(JumpFromBar.class).canStart(playerpatch.getOriginal(), parkourability, DUMMY_BUFFER)) {
-                if (parkourability.get(HangDown.class).isOrthogonalToBar()) {
-                    playerpatch.playAnimationSynchronized(ParCoolAnimations.BIPED_JUMP_FROM_BAR_START_ORTHOGONAL, 0.0F);
-                } else {
-                    playerpatch.playAnimationSynchronized(ParCoolAnimations.BIPED_JUMP_FROM_BAR_START, 0.0F);
-                }
-
                 return true;
             }
 
@@ -187,13 +181,12 @@ public class ParCoolEvents {
                 currentPlay == ParCoolAnimations.BIPED_CLING_TO_CLIFF_LOOK_RIGHT
             ) {
                 Parkourability parkourability = Parkourability.get(playerpatch.getOriginal());
-                DUMMY_BUFFER.clear();
+                WallJump wallJump = (WallJump)action;
 
-                if (parkourability.get(ClingToCliff.class).isDoing() && parkourability.get(WallJump.class).canStart(playerpatch.getOriginal(), parkourability, DUMMY_BUFFER)) {
-                    DUMMY_BUFFER.flip();
-                    Vec3 jumpDirection = new Vec3(DUMMY_BUFFER.getDouble(), DUMMY_BUFFER.getDouble(), DUMMY_BUFFER.getDouble());
-                    Vec3 wallDirection = new Vec3(DUMMY_BUFFER.getDouble(), 0.0D, DUMMY_BUFFER.getDouble());
-                    byte animType = DUMMY_BUFFER.get();
+                if (parkourability.get(ParCoolActions.HANG_ON).isDoing() && wallJump.canStart()) {
+                    Vec3 jumpDirection = ((ParCoolMixinWallJumpAccessor)wallJump).getJumpVec().get();
+                    Vec3 wallDirection = parkourability.getAdditionalProperties().getDefaultWallInteraction().asVec();
+                    int animType = getWallJumpAnimType(playerpatch.getOriginal(), wallDirection);
 
                     switch (animType) {
                     case 0 -> {
@@ -226,16 +219,9 @@ public class ParCoolEvents {
                 return true;
             } else {
                 Parkourability parkourability = Parkourability.get(playerpatch.getOriginal());
-                DUMMY_BUFFER.clear();
 
-                if (parkourability.get(WallJump.class).canStart(playerpatch.getOriginal(), parkourability, DUMMY_BUFFER)) {
-                    DUMMY_BUFFER.flip();
-                    DUMMY_BUFFER.getDouble();
-                    DUMMY_BUFFER.getDouble();
-                    DUMMY_BUFFER.getDouble();
-                    DUMMY_BUFFER.getDouble();
-                    DUMMY_BUFFER.getDouble();
-                    byte animType = DUMMY_BUFFER.get();
+                if (((WallJump)action).canStart()) {
+                    int animType = getWallJumpAnimType(playerpatch.getOriginal(), parkourability.getAdditionalProperties().getDefaultWallInteraction().asVec());
 
                     switch (animType) {
                     case 0 -> {
@@ -253,15 +239,12 @@ public class ParCoolEvents {
             }
         });
 
-        PARCOOL_ACTION_CANCEL_EVENTS.put(ClingToCliff.class, (playerpatch, action) -> {
+        PARCOOL_ACTION_CANCEL_EVENTS.put(HangOn.class, (playerpatch, action) -> {
             if (playerpatch.getAnimator().getPlayerFor(null).getAnimation().get().getRealAnimation() == ParCoolAnimations.BIPED_CLIMB_UP_NO_ACTION) {
                 return true;
             }
 
-            Parkourability parkourability = Parkourability.get(playerpatch.getOriginal());
-            DUMMY_BUFFER.clear();
-
-            if (parkourability.get(ClingToCliff.class).canStart(playerpatch.getOriginal(), parkourability, DUMMY_BUFFER)) {
+            if (((HangOn)action).canStart()) {
                 if (!ParCoolUtils.scanTerrainAndStartClingAction(playerpatch, ParCoolUtils.WallMoveType.CLING_START)) {
                     return true;
                 }
@@ -271,7 +254,7 @@ public class ParCoolEvents {
         });
 
         PARCOOL_ACTION_CANCEL_EVENTS.put(Dodge.class, (playerpatch, action) -> {
-            if (EpicFightKeyMappings.DODGE.getKey() == KeyBindings.getKeyDodge().getKey()) {
+            if (EpicFightKeyMappings.DODGE.getKey() == ParCoolKeyBinds.DODGE.key().getKey()) {
                 if (playerpatch.getSkill(SkillSlots.DODGE).getSkill() != null) {
                     return true;
                 }
@@ -284,7 +267,7 @@ public class ParCoolEvents {
             return false;
         });
 
-        PARCOOL_ACTION_CANCEL_EVENTS.put(Flipping.class, (playerpatch, action) -> {
+        PARCOOL_ACTION_CANCEL_EVENTS.put(TrickJump.class, (playerpatch, action) -> {
             if (playerpatch.getEntityState().movementLocked()) {
                 return true;
             }
@@ -320,7 +303,7 @@ public class ParCoolEvents {
     }
 
     @SubscribeEvent
-    public static void onParCoolActionEvent$TryToStartEvent(ParCoolActionEvent.TryToStartEvent event) {
+    public static void onParCoolActionEvent$TryToStartEvent(ParCoolActionEvent.TryToStart event) {
         if (PARCOOL_ACTION_CANCEL_EVENTS.containsKey(event.getAction().getClass())) {
             PlayerPatch<?> playerpatch = EpicFightCapabilities.getEntityPatch(event.getPlayer(), PlayerPatch.class);
 
@@ -331,7 +314,7 @@ public class ParCoolEvents {
     }
 
     @SubscribeEvent
-    public static void onParCoolActionEvent$StartEvent(ParCoolActionEvent.StartEvent event) {
+    public static void onParCoolActionEvent$StartEvent(ParCoolActionEvent.Start.Post event) {
         PlayerPatch<?> entitypatch = EpicFightCapabilities.getEntityPatch(event.getPlayer(), PlayerPatch.class);
 
         if (entitypatch != null && entitypatch.isLogicalClient() && entitypatch.getOriginal().isLocalPlayer() && entitypatch.isEpicFightMode() && PARCOOL_ACTION_START_MAPPING.containsKey(event.getAction().getClass())) {
@@ -342,14 +325,33 @@ public class ParCoolEvents {
             }
         }
 
-        if (event.getAction().getClass() == ClingToCliff.class) {
+        if (event.getAction().getClass() == HangOn.class) {
             event.getPlayer().setForcedPose(net.minecraft.world.entity.Pose.STANDING);
         }
     }
 
     @SubscribeEvent
-    public static void onParCoolActionEvent$StopEvent(ParCoolActionEvent.StopEvent event) {
-        if (event.getAction().getClass() == ClingToCliff.class) {
+    public static void onParCoolActionEvent$TryToContinueEvent(ParCoolActionEvent.TryToContinue event) {
+        if (event.getAction() instanceof HangDown hangDown && event.getPlayer().isLocalPlayer() && ParCoolKeyBinds.JUMP.state().isJustPressed()) {
+            PlayerPatch<?> playerpatch = EpicFightCapabilities.getEntityPatch(event.getPlayer(), PlayerPatch.class);
+
+            if (playerpatch != null && playerpatch.isEpicFightMode()) {
+                if (ParCoolUtils.isOrthogonalToBar(hangDown)) {
+                    playerpatch.playAnimationSynchronized(ParCoolAnimations.BIPED_JUMP_FROM_BAR_START_ORTHOGONAL, 0.0F);
+                } else {
+                    playerpatch.playAnimationSynchronized(ParCoolAnimations.BIPED_JUMP_FROM_BAR_START, 0.0F);
+                }
+            }
+        }
+    }
+
+    private static int getWallJumpAnimType(Player player, Vec3 wallDirection) {
+        return EntityUtil.getHorizontalLookAngle(player).cross(wallDirection).y < 0.0D ? 1 : 2;
+    }
+
+    @SubscribeEvent
+    public static void onParCoolActionEvent$FinishEvent(ParCoolActionEvent.Finish.Post event) {
+        if (event.getAction().getClass() == HangOn.class) {
             event.getPlayer().setForcedPose(null);
         }
     }

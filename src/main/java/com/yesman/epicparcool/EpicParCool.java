@@ -21,7 +21,7 @@ import yesman.epicfight.main.EpicFightSharedConstants;
 public class EpicParCool {
 	public static final Logger LOGGER = LogUtils.getLogger();
 	public static final String MODID = "epicparcool";
-	public static final String LEAST_PARCOOL_VERSION = "3.4.0.6";
+	public static final String LEAST_PARCOOL_VERSION = "4.0.2.0";
 	
 	public EpicParCool(IEventBus modEventBus, ModContainer modContainer) {
 		modEventBus.addListener(ParCoolEvents::onSetup);

@@ -1,12 +1,13 @@
 package com.yesman.epicparcool.client.screen;
 
-import com.alrex.parcool.common.stamina.StaminaType;
-import com.alrex.parcool.config.ParCoolConfig;
+import com.alrex.parcool.ParCool;
+import com.alrex.parcool.common.stamina.StaminaTypes;
 import com.yesman.epicparcool.EpicParCool;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -18,7 +19,6 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.fml.ModContainer;
 import org.jetbrains.annotations.Nullable;
-import yesman.epicfight.api.utils.ParseUtil;
 import yesman.epicfight.client.gui.datapack.screen.MessageScreen;
 import yesman.epicfight.client.gui.datapack.widgets.ResizableComponent.HorizontalSizing;
 import yesman.epicfight.client.gui.datapack.widgets.Static;
@@ -35,7 +35,12 @@ import static yesman.epicfight.generated.LangKeys.*;
 
 @OnlyIn(Dist.CLIENT)
 public class EpicParCoolConfigurations extends Screen {
-	private static final StaminaType[] STAMINA_TYPE_ENUMS = StaminaType.values();
+	private static final List<String> STAMINA_TYPE_IDS = List.of(
+		StaminaTypes.NONE_STAMINA.id().toString(),
+		StaminaTypes.PARCOOL_STAMINA.id().toString(),
+		StaminaTypes.HUNGER_STAMINA.id().toString(),
+		"epicfight:epicfight"
+	);
 
     @Nullable
 	private final Screen parentScreen;
@@ -115,8 +120,6 @@ public class EpicParCoolConfigurations extends Screen {
         widgetTable = new WidgetTable(this, 10, 0, 5, 10, AnchoredWidget.HorizontalAnchorType.LEFT_RIGHT, AnchoredWidget.VerticalAnchorType.TOP_BOTTOM, 21);
         textBox = new TextBox(this.minecraft.font, 10, 0, 5, 40, AnchoredWidget.HorizontalAnchorType.RIGHT_WIDTH, AnchoredWidget.VerticalAnchorType.TOP_BOTTOM, Component.empty());
 
-        System.out.println(ParCoolConfig.Client.getInstance().StaminaType.get());
-
         widgetTable
             .newRow()
                 .addWidget(
@@ -145,12 +148,12 @@ public class EpicParCoolConfigurations extends Screen {
                         15,
                         AnchoredWidget.HorizontalAnchorType.RIGHT_WIDTH,
                         AnchoredWidget.VerticalAnchorType.TOP_HEIGHT,
-                        () -> ParCoolConfig.Client.getInstance().StaminaType.get(),
-                        value -> ParCoolConfig.Client.getInstance().StaminaType.set(value),
+                        () -> ParCool.getConfig().server().staminaType.get(),
+                        value -> ParCool.getConfig().server().staminaType.set(value),
                         8,
                         Component.translatable("gui.epicparcool.widget.config_screen.stamina_source"),
-                        List.of(StaminaType.values()),
-                        value -> Component.translatable("gui.epicparcool.widget.stamina_source." + ParseUtil.toLowerCase(value.name())).getString()
+                        STAMINA_TYPE_IDS,
+                        value -> Component.translatable("gui.epicparcool.widget.stamina_source." + ResourceLocation.parse(value).getPath()).getString()
                     )
                 );
 
